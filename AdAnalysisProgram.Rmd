@@ -1,0 +1,140 @@
+---
+title: "ADanalysisProgram"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+### Import the libraries we need
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(readr)
+library(stringr)
+library(dplyr)
+library(magrittr)
+```
+
+### Batch import the csv files in folders
+#### Change the path name as your own file path
+```{r}
+path <- "/Users/yuanpili/OneDrive - Technological University Dublin/2020-2021 year 3/statistical programming/dataset/"
+files <- list.files(path=path, pattern="*.csv")
+for(file in files)
+{
+  perpos <- which(strsplit(file, "")[[1]]==".")
+  assign(
+    gsub(" ","",substr(file, 1, perpos-1)), 
+    read.csv(paste(path,file,sep="")))
+}
+```
+#### In the environment on the right shows that all the CSV files have been imported
+
+### Validating primary keys
+#### Validate that primary keys of 'advertiser' and 'campaigns' are unique. There should be no counts greater than 1.
+```{r}
+advertiser_id_counts <- count(advertiser, ID) 
+filter(advertiser_id_counts, n>1)
+
+campaigns_id_counts <- count(campaigns, id)
+filter(campaigns_id_counts, n>1)
+```
+
+### Join all the tables together into 'res' that contains advertiser_id, advertiser_name, campaign_id, campaign_name, budget, clicks(number of clicks), impressions(number of impressions), conversions(number of conversions)
+```{r}
+click <- count(clicks, campaign_id)
+impression <- count(impressions, campaign_id)
+conversion <- count(conversions, campaign_id)
+
+# since we need to change the variable name after each join, so pipe doesn't work here the best
+res <- full_join(advertiser,campaigns,by=c('ID'='advertiser_id'))
+names(res)[names(res)=="id"]="campaign_id"
+names(res)[names(res)=='ID']='advertiser_id'
+names(res)[names(res)=='name.x']='advertiser_name'
+names(res)[names(res)=='name.y']='campaign_name'
+
+res <- full_join(res,click,by=c('campaign_id'='campaign_id'))
+names(res)[names(res)=="n"]="clicks"
+res$clicks[which(is.na(res$clicks))]<-0 
+
+res <- full_join(res,impression,by=c('campaign_id'='campaign_id'))
+names(res)[names(res)=='n']='impressions'
+
+res <- full_join(res,conversion,by=c('campaign_id'='campaign_id'))
+names(res)[names(res)=='n']='conversions'
+res$conversions[which(is.na(res$conversions))]<-0
+
+res <- na.omit(res) # delete the rows(impressions) that contain NA value
+```
+
+
+### Analysis CTR, CPC, CPM, conversion_rate
+```{r}
+res <- mutate(res, CTR = impressions / clicks) %>%  # Click-through rate = impressions / clicks
+  mutate(CPC = budget / clicks) %>% # Cost per click (CPC) = total cost/number of clicks
+  mutate(CPM = (budget / impressions) * 1000) %>% # Cost Per Thousand Impression (CPM) = (budget/number of impressions)*1000
+  mutate(conversion_rate = conversions / clicks)
+
+```
+
+### Graph of the numbers of clicks and impressions vs campaign id
+```{r}
+clicks_impressions <- select(res,campaign_id,clicks,impressions) %>%
+  gather(clicks,impressions,key = type, value = number)
+
+ggplot(data=clicks_impressions) +
+  geom_bar(aes(factor(x=campaign_id),y=number,fill=type),stat="identity",position = "dodge")+
+  ylab("Count")+xlab("campaign id")
+```
+### Budget of each campaign
+```{r}
+ggplot(data=res, aes(factor(x=campaign_id), y=budget)) +
+  geom_bar(stat="identity", width=0.75) + 
+  ggtitle("Budget of Campaign") +
+  xlab("Campaign id")
+
+```
+
+### CPC (Cost per click) for each campaign id
+```{r}
+ggplot(data=res, aes(factor(x=campaign_id), y=CPC)) +
+  geom_bar(stat="identity", width=0.75) + 
+  ggtitle("CPC of Campaign") +
+  xlab("Campaign id")
+```
+
+### CPM of each campaign
+```{r}
+ggplot(data=res, aes(factor(x=campaign_id), y=CPM)) +
+  geom_bar(stat="identity", width=0.75) + 
+  ggtitle("CPM of Campaign") +
+  xlab("Campaign id")
+```
+
+### the Convertion rate of each Campaign
+```{r}
+CR <- select(res,campaign_id,conversion_rate)
+CR <- na.omit(CR)
+ggplot(data = CR) +
+  geom_line(aes(factor(x=campaign_id),y=conversion_rate,group=1)) +
+  xlab("Campaign id")+ylab("Conversion rate")
+```
+
+
+```{r}
+# From the number of timezone of clicks and conversions, we can see where are the users click the most and convert the most based on, so advertisers can consider placing more ads in those places.
+count(clicks,timezone)
+count(conversions,timezone)
+```
+
+
+
+
+
+
+
+
+
+
+
+
